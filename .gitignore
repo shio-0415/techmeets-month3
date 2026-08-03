@@ -1,0 +1,8 @@
+# Laravel
+week10/基本課題/vendor/
+week10/基本課題/.env
+week10/基本課題/storage/logs/*.log
+week10/基本課題/node_modules/
+
+# React
+week10/frontend/node_modules/
