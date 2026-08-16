@@ -6,6 +6,7 @@ use App\Http\Requests\StorePostRequest;
 use App\Http\Requests\UpdatePostRequest;
 use App\Models\Post;
 use App\Services\PostService;
+use Illuminate\Support\Facades\Storage;
 
 class PostController extends Controller
 {
@@ -26,8 +27,14 @@ class PostController extends Controller
 
     public function store(StorePostRequest $request)
     {
-        $this->postService->createPost($request->validated(), auth()->id());
+        $data = $request->validated();
 
+        if ($request->hasFile('image')) {
+            $path = $request->file('image')->store('posts', 's3');
+            $data['image_path'] = $path;
+        }
+
+        $this->postService->createPost($data, auth()->id());
         return redirect()->route('posts.index')->with('success', '投稿しました');
     }
 
@@ -45,18 +52,14 @@ class PostController extends Controller
     public function update(UpdatePostRequest $request, Post $post)
     {
         $this->authorize('update', $post);
-
         $this->postService->updatePost($post, $request->validated());
-
         return redirect()->route('posts.index')->with('success', '投稿を更新しました');
     }
 
     public function destroy(Post $post)
     {
         $this->authorize('delete', $post);
-
         $this->postService->deletePost($post);
-
         return redirect()->route('posts.index')->with('success', '投稿を削除しました');
     }
 }
