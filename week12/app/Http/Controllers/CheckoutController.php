@@ -5,7 +5,9 @@ namespace App\Http\Controllers;
 use App\Models\Purchase;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
+use Illuminate\Support\Facades\Log;
 use Stripe\Checkout\Session as StripeCheckoutSession;
+use Stripe\Exception\ApiErrorException;
 use Stripe\Stripe;
 
 class CheckoutController extends Controller
@@ -30,26 +32,37 @@ class CheckoutController extends Controller
     {
         Stripe::setApiKey(config('services.stripe.secret'));
 
-        $session = StripeCheckoutSession::create([
-            'payment_method_types' => ['card'],
-            'mode' => 'payment',
-            'line_items' => [[
-                'price_data' => [
-                    'currency' => 'jpy',
-                    'product_data' => [
-                        'name' => 'テスト商品',
+        try {
+            $session = StripeCheckoutSession::create([
+                'payment_method_types' => ['card'],
+                'mode' => 'payment',
+                'line_items' => [[
+                    'price_data' => [
+                        'currency' => 'jpy',
+                        'product_data' => [
+                            'name' => 'テスト商品',
+                        ],
+                        'unit_amount' => 1000,
                     ],
-                    'unit_amount' => 1000,
+                    'quantity' => 1,
+                ]],
+                'success_url' => route('checkout.success') . '?session_id={CHECKOUT_SESSION_ID}',
+                'cancel_url' => route('checkout.cancel'),
+                'client_reference_id' => Auth::id(),
+                'metadata' => [
+                    'user_id' => Auth::id(),
                 ],
-                'quantity' => 1,
-            ]],
-            'success_url' => route('checkout.success') . '?session_id={CHECKOUT_SESSION_ID}',
-            'cancel_url' => route('checkout.cancel'),
-            'client_reference_id' => Auth::id(),
-            'metadata' => [
+            ]);
+        } catch (ApiErrorException $e) {
+            // Stripeとの通信失敗・APIエラー時にログを残し、利用者にはわかりやすいメッセージを返す
+            Log::error('Stripe checkout session creation failed', [
+                'message' => $e->getMessage(),
                 'user_id' => Auth::id(),
-            ],
-        ]);
+            ]);
+
+            return redirect()->route('checkout.show')
+                ->with('error', '決済ページの作成に失敗しました。時間をおいて再度お試しください。');
+        }
 
         return redirect($session->url);
     }
@@ -67,7 +80,17 @@ class CheckoutController extends Controller
             return redirect()->route('checkout.show')->with('error', 'セッション情報がありません');
         }
 
-        $session = StripeCheckoutSession::retrieve($sessionId);
+        try {
+            $session = StripeCheckoutSession::retrieve($sessionId);
+        } catch (ApiErrorException $e) {
+            Log::error('Stripe checkout session retrieval failed', [
+                'message' => $e->getMessage(),
+                'session_id' => $sessionId,
+            ]);
+
+            return redirect()->route('checkout.show')
+                ->with('error', '決済情報の確認に失敗しました。時間をおいて再度お試しください。');
+        }
 
         $purchase = Purchase::firstOrCreate(
             ['stripe_session_id' => $session->id],
