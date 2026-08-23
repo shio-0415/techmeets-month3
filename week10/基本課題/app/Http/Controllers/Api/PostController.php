@@ -16,7 +16,6 @@ class PostController extends Controller
     public function index()
     {
         $posts = $this->postService->getPaginatedPosts();
-
         return PostResource::collection($posts);
     }
 
@@ -24,7 +23,7 @@ class PostController extends Controller
     {
         $post = $this->postService->createPost(
             $request->validated(),
-            auth()->id() ?? 1
+            auth()->id()
         );
 
         return new PostResource($post);
