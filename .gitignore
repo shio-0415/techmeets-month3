@@ -1,12 +1,13 @@
-
-
 # Laravel
 week10/基本課題/vendor/
 week10/基本課題/storage/logs/*.log
 week10/基本課題/node_modules/
+
 # React
-week10/frontend/node_modules/*.pem
+week10/frontend/node_modules/
 
-# 環境変数ファイルは、どのフォルダにあっても除外する
+# 秘密鍵ファイルは、どこにあっても除外する
+*.pem
+
+# 環境変数ファイルは、どこにあっても除外する
 **/.env
-
