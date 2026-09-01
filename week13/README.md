@@ -48,6 +48,72 @@ Week11でデプロイしたLaravelアプリ（EC2 + Docker Compose、`week10/基
 結果: Expiry Date: 2026-11-23 (VALID: 89 days)
 取得したSSL証明書の有効期限が表示される。Let's Encryptの証明書は90日間有効で、Certbotがインストール時に自動でsystemdタイマーを設定しているため、期限が近づくと自動的に更新される仕組みになっている。
 
+
+### curl -I http://ドメイン名（HTTP→HTTPSリダイレクトの確認）
+結果:
+```
+HTTP/1.1 301 Moved Permanently
+Location: https://shio-portfolio.com/
+```
+301はリソースが恒久的に別のURLに移動したことを示すステータスコードで、`Location`ヘッダーに
+移動先のURL（HTTPS版）が示されている。ブラウザはこれを受けて自動的にHTTPS版へ再アクセスするため、
+利用者が`http://`を入力しても最終的に暗号化された接続に切り替わる。
 ## 練習課題2: wwwなし・ありの統一
 
 wwwありのHTTPSアクセスにも対応する証明書をCertbotで取得した上で、www用に専用のNginx server blockを追加し、wwwありのアクセスをwwwなしのURLに301リダイレクトするよう設定した。
+
+## Nginx設定ファイル抜粋
+
+`/etc/nginx/sites-available/shio-portfolio.com`（メインドメイン用、Certbotが自動でSSL設定とリダイレクトを追記）:
+
+```nginx
+server {
+    server_name shio-portfolio.com;
+
+    location / {
+        proxy_pass http://127.0.0.1:8080;
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+    }
+
+    listen 443 ssl;
+    ssl_certificate /etc/letsencrypt/live/shio-portfolio.com/fullchain.pem;
+    ssl_certificate_key /etc/letsencrypt/live/shio-portfolio.com/privkey.pem;
+    include /etc/letsencrypt/options-ssl-nginx.conf;
+    ssl_dhparam /etc/letsencrypt/ssl-dhparams.pem;
+}
+
+server {
+    if ($host = shio-portfolio.com) {
+        return 301 https://$host$request_uri;
+    }
+    if ($host = www.shio-portfolio.com) {
+        return 301 https://$host$request_uri;
+    }
+
+    listen 80;
+    server_name shio-portfolio.com;
+    return 404;
+}
+```
+
+`/etc/nginx/sites-available/www-redirect.com`（wwwありのアクセスをwwwなしにリダイレクトするための専用設定）:
+
+```nginx
+server {
+    listen 443 ssl;
+    server_name www.shio-portfolio.com;
+
+    ssl_certificate /etc/letsencrypt/live/shio-portfolio.com/fullchain.pem;
+    ssl_certificate_key /etc/letsencrypt/live/shio-portfolio.com/privkey.pem;
+    include /etc/letsencrypt/options-ssl-nginx.conf;
+    ssl_dhparam /etc/letsencrypt/ssl-dhparams.pem;
+
+    return 301 https://shio-portfolio.com$request_uri;
+}
+```
+
+`proxy_pass`でリクエストをDockerコンテナ内のNginx（ホストのポート8080にマッピング）に転送し、
+`proxy_set_header`で元のリクエストのホスト名やIPアドレスなどの情報をバックエンドに引き継いでいる。
